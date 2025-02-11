@@ -1,0 +1,7 @@
+# Replace with your Telegram bot token from BotFather
+TELEGRAM_BOT_TOKEN = "7731485158:AAG7HBXEMPG82Zo40g159xSnU2ALyemMQdY"
+
+# ---------------------------
+# Load Gemini API Key from JSON File
+# ---------------------------
+SERVICE_ACCOUNT_FILE = "uni-lab-bots-c96672ca3188.json"

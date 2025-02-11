@@ -20,7 +20,6 @@ from google import genai
 from google.genai import types
 
 import os
-
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -31,9 +30,6 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
-# Replace with your Telegram bot token from BotFather
-# TELEGRAM_BOT_TOKEN = "7731485158:AAG7HBXEMPG82Zo40g159xSnU2ALyemMQdY"
 
 # A common instruction to add to each prompt.
 HUMAN_SUFFIX = (
@@ -117,6 +113,41 @@ def get_chat(user_id):
     return None.
     """
     return user_chats.get(user_id)
+
+# ---------------------------
+# Load previous chat history from the database and restore chat sessions.
+# ---------------------------
+def load_user_chats():
+    """
+    Loads distinct user IDs from the chat history database and creates
+    a new Gemini chat session for each user using the default system prompt.
+    
+    Note: This example uses SYSTEM_PROMPT for all users. If you need to restore
+    the user's chosen personality, you should store that info in the DB and use it here.
+    """
+    cursor.execute("SELECT DISTINCT user_id FROM chat")
+    user_ids = [row[0] for row in cursor.fetchall()]
+    for user_id in user_ids:
+        try:
+            chat = client.chats.create(
+                model="gemini-2.0-flash",
+                config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT)
+            )
+            user_chats[user_id] = chat
+            logger.info("Restored chat session for user %s", user_id)
+            
+            # Optionally, you could load and re-play the user's conversation history
+            # into the chat session (if the Gemini API supports adding context).
+            # Example (pseudocode):
+            cursor.execute("SELECT user_message, bot_response FROM chat WHERE user_id = ? ORDER BY timestamp", (user_id,))
+            history = cursor.fetchall()
+            hist = ''
+            for user_msg, bot_resp in history:
+                hist += f"User: {user_msg} Bot: {bot_resp}\n"
+            chat.send_message(hist)
+            
+        except Exception as e:
+            logger.error("Failed to restore chat session for user %s: %s", user_id, e)
 
 # ---------------------------
 # Follow-Up Chain Function
@@ -278,7 +309,7 @@ async def handle_image_message(update: Update, context: ContextTypes.DEFAULT_TYP
     (or a default prompt) to Gemini.
     Logs both the receipt of the image and Gemini's response in the database.
     After replying, a follow-up chain is scheduled.
-    If the user sends a new message while waiting, any pending follow-ups are canceled.
+    If the user sends a new message while waiting, any pending follow-ups are cancelled.
     """
     user_id = update.message.from_user.id
     chat_id = update.effective_chat.id
@@ -336,6 +367,9 @@ async def handle_image_message(update: Update, context: ContextTypes.DEFAULT_TYP
 # Main Function to Start the Bot
 # ---------------------------
 def main():
+    # Load any previous chat sessions from the database.
+    load_user_chats()
+
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
     # Command handlers
